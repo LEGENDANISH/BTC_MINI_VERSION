@@ -1,4 +1,3 @@
-// miner.js
 const WebSocket = require('ws');
 const crypto = require('crypto');
 
@@ -61,15 +60,10 @@ class Transaction {
   }
 
   isValid() {
-    // Mining rewards don't need signature
     if (this.from === null) return true;
-
     if (!this.signature || this.signature.length === 0) {
       throw new Error('No signature in this transaction');
     }
-
-    // For simplicity, we'll skip EC signature verification in this demo
-    // In production, you'd use elliptic library to verify signatures
     return true;
   }
 }
@@ -94,22 +88,17 @@ class Blockchain {
     if (!transaction.from || !transaction.to) {
       throw new Error('Transaction must include from and to address');
     }
-
     if (!transaction.isValid()) {
       throw new Error('Cannot add invalid transaction to chain');
     }
-
-    // Check if sender has enough balance
     const balance = this.getBalanceOfAddress(transaction.from);
     if (balance < transaction.amount) {
       throw new Error('Not enough balance');
     }
-
     this.pendingTransactions.push(transaction);
   }
 
   minePendingTransactions(miningRewardAddress) {
-    // Add mining reward
     const rewardTx = new Transaction(null, miningRewardAddress, this.miningReward);
     this.pendingTransactions.push(rewardTx);
 
@@ -129,18 +118,12 @@ class Blockchain {
 
   getBalanceOfAddress(address) {
     let balance = 0;
-
     for (const block of this.chain) {
       for (const trans of block.transactions) {
-        if (trans.from === address) {
-          balance -= trans.amount;
-        }
-        if (trans.to === address) {
-          balance += trans.amount;
-        }
+        if (trans.from === address) balance -= trans.amount;
+        if (trans.to === address) balance += trans.amount;
       }
     }
-
     return balance;
   }
 
@@ -149,29 +132,13 @@ class Blockchain {
       const currentBlock = chain[i];
       const previousBlock = chain[i - 1];
 
-      // Validate transactions in block
       for (const trans of currentBlock.transactions) {
-        if (!trans.isValid()) {
-          return false;
-        }
+        if (!trans.isValid()) return false;
       }
-
-      // Check if hash is correct
-      if (currentBlock.hash !== currentBlock.calculateHash()) {
-        return false;
-      }
-
-      // Check if block is linked to previous
-      if (currentBlock.previousHash !== previousBlock.hash) {
-        return false;
-      }
-
-      // Check proof of work
-      if (!currentBlock.hash.startsWith('0'.repeat(this.difficulty))) {
-        return false;
-      }
+      if (currentBlock.hash !== currentBlock.calculateHash()) return false;
+      if (currentBlock.previousHash !== previousBlock.hash) return false;
+      if (!currentBlock.hash.startsWith('0'.repeat(this.difficulty))) return false;
     }
-
     return true;
   }
 
@@ -180,12 +147,10 @@ class Blockchain {
       console.log('Received chain is not longer than current chain');
       return false;
     }
-
     if (!this.isChainValid(newChain)) {
       console.log('Received chain is invalid');
       return false;
     }
-
     console.log('Replacing current chain with new chain');
     this.chain = newChain;
     return true;
@@ -207,8 +172,6 @@ class Miner {
     this.ws.on('open', () => {
       console.log('Connected to central server');
       this.isConnected = true;
-      
-      // Request the current blockchain
       this.requestBlockchain();
     });
 
@@ -219,8 +182,6 @@ class Miner {
     this.ws.on('close', () => {
       console.log('Disconnected from server');
       this.isConnected = false;
-      
-      // Reconnect after 5 seconds
       setTimeout(() => this.connect(), 5000);
     });
 
@@ -243,9 +204,6 @@ class Miner {
       case 'NEW_TRANSACTION':
         this.handleNewTransaction(message.transaction);
         break;
-      case 'GET_BALANCE':
-        this.handleBalanceRequest(message.address);
-        break;
     }
   }
 
@@ -257,11 +215,9 @@ class Miner {
   }
 
   reconstructBlock(blockData) {
-    // Reconstruct all transactions in the block
-    const transactions = blockData.transactions.map(txData => 
+    const transactions = blockData.transactions.map(txData =>
       this.reconstructTransaction(txData)
     );
-    
     const block = new Block(
       blockData.index,
       blockData.timestamp,
@@ -275,37 +231,30 @@ class Miner {
 
   handleNewBlock(blockData) {
     const block = this.reconstructBlock(blockData);
-    
-    // Verify the block
     if (block.index !== this.blockchain.chain.length) {
       console.log('Block index mismatch, requesting full chain');
       this.requestBlockchain();
       return;
     }
-
     if (block.previousHash !== this.blockchain.getLatestBlock().hash) {
       console.log('Invalid previous hash, requesting full chain');
       this.requestBlockchain();
       return;
     }
-
     if (block.hash !== block.calculateHash()) {
       console.log('Invalid block hash');
       return;
     }
-
     if (!block.hash.startsWith('0'.repeat(this.blockchain.difficulty))) {
       console.log('Block does not meet difficulty requirement');
       return;
     }
-
     console.log('Received valid block, adding to chain');
     this.blockchain.chain.push(block);
   }
 
   handleBlockchain(chainData) {
     const newChain = chainData.map(blockData => this.reconstructBlock(blockData));
-    
     if (this.blockchain.replaceChain(newChain)) {
       console.log('Blockchain updated from network');
     }
@@ -320,7 +269,6 @@ class Miner {
       );
       transaction.timestamp = transactionData.timestamp;
       transaction.signature = transactionData.signature;
-      
       this.blockchain.addTransaction(transaction);
       console.log('Added new transaction to pending pool');
     } catch (error) {
@@ -363,21 +311,16 @@ class Miner {
 
   startMining() {
     console.log(`Miner ${this.minerAddress} started`);
-    
     setInterval(() => {
       if (this.blockchain.pendingTransactions.length > 0 || Math.random() > 0.7) {
         console.log('\nStarting mining...');
         const block = this.blockchain.minePendingTransactions(this.minerAddress);
-        
         console.log(`Balance: ${this.blockchain.getBalanceOfAddress(this.minerAddress)}`);
-        
-        // Broadcast the new block
         this.broadcastBlock(block);
       }
-    }, 10000); // Mine every 10 seconds
+    }, 10000);
   }
 
-  // Helper method to create and broadcast a transaction
   createTransaction(to, amount) {
     try {
       const transaction = new Transaction(this.minerAddress, to, amount);
@@ -400,19 +343,16 @@ class Miner {
   }
 }
 
-// Start miner
 const CENTRAL_SERVER = 'ws://localhost:8080';
 const MINER_ADDRESS = process.argv[2] || `miner-${Math.random().toString(36).substr(2, 9)}`;
 
 const miner = new Miner(CENTRAL_SERVER, MINER_ADDRESS);
 miner.connect();
 
-// Wait for connection and blockchain sync before mining
 setTimeout(() => {
   miner.startMining();
 }, 3000);
 
-// CLI commands
 process.stdin.setEncoding('utf8');
 console.log('\nCommands:');
 console.log('  balance - Check your balance');
@@ -423,7 +363,6 @@ console.log('  quit - Exit\n');
 process.stdin.on('data', (input) => {
   const parts = input.trim().split(' ');
   const command = parts[0];
-
   switch (command) {
     case 'balance':
       console.log(`Balance: ${miner.getBalance()}`);
