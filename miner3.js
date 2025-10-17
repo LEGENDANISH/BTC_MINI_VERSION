@@ -243,6 +243,9 @@ class Miner {
       case 'NEW_TRANSACTION':
         this.handleNewTransaction(message.transaction);
         break;
+      case 'GET_BALANCE':
+        this.handleBalanceRequest(message.address);
+        break;
     }
   }
 
